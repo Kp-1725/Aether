@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { MessageList, type Message } from "@/components/message-list";
+import { MessageList, type Message as UIMessage } from "@/components/message-list";
 import { MessageInput } from "@/components/message-input";
 import { WalletButton } from "@/components/wallet-button";
 import { ConnectionStatus } from "@/components/connection-status";
@@ -9,59 +10,167 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { WalletConnectionDialog } from "@/components/wallet-connection-dialog";
 import { RoomCreationDialog } from "@/components/room-creation-dialog";
 import { KeyManagementDialog } from "@/components/key-management-dialog";
-import { connectWallet, disconnectWallet, encryptMessage, hashMessage, type WalletState } from "@/lib/web3";
+import { connectWallet, disconnectWallet, encryptMessage, decryptMessage, hashMessage, type WalletState } from "@/lib/web3";
 import { useToast } from "@/hooks/use-toast";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import type { Room, Message } from "@shared/schema";
 
-// TODO: remove mock functionality
-const MOCK_ROOMS = [
-  { id: '1', name: 'general' },
-  { id: '2', name: 'announcements' },
-  { id: '3', name: 'random' },
-];
-
-const MOCK_MESSAGES: Record<string, Message[]> = {
-  '1': [
-    {
-      id: '1',
-      sender: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
-      content: 'Welcome to the decentralized chat! All messages are encrypted end-to-end.',
-      timestamp: new Date(Date.now() - 3600000),
-      verified: true,
-    },
-    {
-      id: '2',
-      sender: '0x9876543210987654321098765432109876543210',
-      content: 'Thanks! How does the blockchain verification work?',
-      timestamp: new Date(Date.now() - 1800000),
-      verified: true,
-    },
-    {
-      id: '3',
-      sender: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
-      content: 'Each message hash is stored on-chain for verification, but the content stays encrypted locally.',
-      timestamp: new Date(Date.now() - 900000),
-      verified: true,
-    },
-  ],
-  '2': [],
-  '3': [],
-};
+const ENCRYPTION_KEY_STORAGE_PREFIX = "encryption_key_";
 
 export default function Chat() {
   const { toast } = useToast();
+  const wsRef = useRef<WebSocket | null>(null);
+  
   const [walletState, setWalletState] = useState<WalletState>({
     address: null,
     connected: false,
     balance: null,
   });
-  const [activeRoomId, setActiveRoomId] = useState<string>('1');
-  const [messages, setMessages] = useState<Record<string, Message[]>>(MOCK_MESSAGES);
-  const [encryptionKey, setEncryptionKey] = useState<string | null>(null);
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [encryptionKeys, setEncryptionKeys] = useState<Record<string, string>>({});
   
   const [walletDialogOpen, setWalletDialogOpen] = useState(false);
   const [roomDialogOpen, setRoomDialogOpen] = useState(false);
   const [keyDialogOpen, setKeyDialogOpen] = useState(false);
   const [walletError, setWalletError] = useState<string>("");
+
+  // Fetch rooms
+  const { data: rooms = [], isLoading: roomsLoading } = useQuery<Room[]>({
+    queryKey: ["/api/rooms"],
+    refetchOnWindowFocus: false,
+  });
+
+  // Set initial active room when rooms load
+  useEffect(() => {
+    if (rooms.length > 0 && !activeRoomId) {
+      setActiveRoomId(rooms[0].id);
+    }
+  }, [rooms, activeRoomId]);
+
+  // Fetch messages for active room
+  const { data: messages = [], isLoading: messagesLoading } = useQuery<Message[]>({
+    queryKey: ["/api/rooms", activeRoomId, "messages"],
+    enabled: !!activeRoomId,
+    refetchOnWindowFocus: false,
+  });
+
+  // Load encryption keys from localStorage
+  useEffect(() => {
+    if (rooms.length === 0) return;
+    
+    const keys: Record<string, string> = {};
+    rooms.forEach(room => {
+      const key = localStorage.getItem(`${ENCRYPTION_KEY_STORAGE_PREFIX}${room.id}`);
+      if (key) {
+        keys[room.id] = key;
+      }
+    });
+    
+    setEncryptionKeys(prev => {
+      // Only update if keys actually changed
+      const hasChanges = rooms.some(room => 
+        (keys[room.id] || null) !== (prev[room.id] || null)
+      );
+      return hasChanges ? keys : prev;
+    });
+  }, [rooms.length]);
+
+  // WebSocket connection
+  useEffect(() => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log("WebSocket connected");
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "new_message" && data.message) {
+          // Update the cache directly with the new message
+          queryClient.setQueryData<Message[]>(
+            ["/api/rooms", data.roomId, "messages"],
+            (oldMessages = []) => [...oldMessages, data.message]
+          );
+        }
+      } catch (error) {
+        console.error("Error parsing WebSocket message:", error);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+    ws.onclose = () => {
+      console.log("WebSocket disconnected");
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, []);
+
+  // Create room mutation
+  const createRoomMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await apiRequest("POST", "/api/rooms", { name });
+      return await res.json() as Room;
+    },
+    onSuccess: (newRoom) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/rooms"] });
+      setActiveRoomId(newRoom.id);
+      toast({
+        title: "Room Created",
+        description: `Room "${newRoom.name}" has been created`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create room",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Send message mutation
+  const sendMessageMutation = useMutation({
+    mutationFn: async ({ roomId, content }: { roomId: string; content: string }) => {
+      if (!walletState.address) throw new Error("Wallet not connected");
+      
+      const key = encryptionKeys[roomId];
+      if (!key) throw new Error("No encryption key set for this room");
+
+      const encryptedContent = encryptMessage(content, key);
+      const messageHash = hashMessage(encryptedContent);
+
+      const res = await apiRequest("POST", `/api/rooms/${roomId}/messages`, {
+        sender: walletState.address,
+        encryptedContent,
+        hash: messageHash,
+        verified: "false",
+      });
+      return await res.json() as Message;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Message Sent",
+        description: "Message encrypted and sent",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send message",
+        variant: "destructive",
+      });
+    },
+  });
 
   const handleConnectWallet = async () => {
     try {
@@ -101,58 +210,71 @@ export default function Chat() {
       return;
     }
 
-    if (!encryptionKey) {
+    if (!activeRoomId) {
+      toast({
+        title: "No Room Selected",
+        description: "Please select a room first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!encryptionKeys[activeRoomId]) {
       toast({
         title: "No Encryption Key",
-        description: "Please set an encryption key first",
+        description: "Please set an encryption key for this room",
         variant: "destructive",
       });
       setKeyDialogOpen(true);
       return;
     }
 
-    // TODO: remove mock functionality - encrypt and send to blockchain
-    const encryptedContent = encryptMessage(content, encryptionKey);
-    const messageHash = hashMessage(encryptedContent);
-    
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      sender: walletState.address,
-      content,
-      timestamp: new Date(),
-      verified: false,
-    };
-
-    setMessages(prev => ({
-      ...prev,
-      [activeRoomId]: [...(prev[activeRoomId] || []), newMessage],
-    }));
-
-    toast({
-      title: "Message Sent",
-      description: "Message encrypted and hash sent to blockchain",
-    });
-
-    console.log('Encrypted:', encryptedContent);
-    console.log('Hash:', messageHash);
+    sendMessageMutation.mutate({ roomId: activeRoomId, content });
   };
 
   const handleCreateRoom = (roomName: string) => {
-    // TODO: remove mock functionality
-    console.log('Creating room:', roomName);
-    toast({
-      title: "Room Created",
-      description: `Room "${roomName}" has been created`,
-    });
+    createRoomMutation.mutate(roomName);
   };
 
   const handleSetKey = (key: string) => {
-    setEncryptionKey(key);
+    if (!activeRoomId) return;
+    
+    localStorage.setItem(`${ENCRYPTION_KEY_STORAGE_PREFIX}${activeRoomId}`, key);
+    setEncryptionKeys(prev => ({
+      ...prev,
+      [activeRoomId]: key,
+    }));
+    
     toast({
       title: "Encryption Key Set",
       description: "Messages will now be encrypted with this key",
     });
   };
+
+  // Decrypt messages for display
+  const decryptedMessages: UIMessage[] = messages.map(msg => {
+    const key = encryptionKeys[msg.roomId];
+    let decryptedContent = msg.encryptedContent;
+    
+    if (key) {
+      try {
+        decryptedContent = decryptMessage(msg.encryptedContent, key);
+      } catch (error) {
+        console.error("Failed to decrypt message:", error);
+        decryptedContent = "[Unable to decrypt - wrong key?]";
+      }
+    } else {
+      decryptedContent = "[Encrypted - set key to view]";
+    }
+
+    return {
+      id: msg.id,
+      sender: msg.sender,
+      content: decryptedContent,
+      timestamp: new Date(msg.timestamp),
+      verified: msg.verified === "true",
+    };
+  });
 
   const style = {
     "--sidebar-width": "20rem",
@@ -163,7 +285,7 @@ export default function Chat() {
     <SidebarProvider style={style as React.CSSProperties}>
       <div className="flex h-screen w-full">
         <AppSidebar
-          rooms={MOCK_ROOMS}
+          rooms={rooms}
           activeRoomId={activeRoomId}
           onRoomSelect={setActiveRoomId}
           onCreateRoom={() => setRoomDialogOpen(true)}
@@ -189,15 +311,21 @@ export default function Chat() {
             </div>
           </header>
           <main className="flex-1 overflow-hidden">
-            <MessageList 
-              messages={messages[activeRoomId] || []} 
-              currentUserAddress={walletState.address}
-            />
+            {messagesLoading ? (
+              <div className="flex items-center justify-center h-full text-muted-foreground">
+                Loading messages...
+              </div>
+            ) : (
+              <MessageList 
+                messages={decryptedMessages} 
+                currentUserAddress={walletState.address}
+              />
+            )}
           </main>
           <MessageInput 
             onSend={handleSendMessage}
-            disabled={!walletState.connected}
-            encrypted={!!encryptionKey}
+            disabled={!walletState.connected || !activeRoomId || sendMessageMutation.isPending}
+            encrypted={activeRoomId ? !!encryptionKeys[activeRoomId] : false}
           />
         </div>
       </div>
@@ -218,7 +346,7 @@ export default function Chat() {
       <KeyManagementDialog
         open={keyDialogOpen}
         onOpenChange={setKeyDialogOpen}
-        currentKey={encryptionKey}
+        currentKey={activeRoomId ? encryptionKeys[activeRoomId] : null}
         onSetKey={handleSetKey}
       />
     </SidebarProvider>
