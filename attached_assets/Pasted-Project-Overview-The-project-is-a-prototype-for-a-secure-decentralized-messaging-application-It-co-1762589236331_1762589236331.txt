@@ -1,0 +1,40 @@
+Project Overview
+The project is a prototype for a secure, decentralized messaging application. It combines blockchain technology for verification with client-side encryption for privacy. The goal is to create a chat system where messages are private and cannot be read by a central server, while the record of communication is secure and tamper-proof.
+
+The project is built on two main components:
+
+A Blockchain Smart Contract (ChatContract.sol)
+
+A Web Application Frontend (index.html)
+
+How It Works: The Two-Part Architecture
+1. The On-Chain Component: The Notary
+The Smart Contract acts like a secure, public notary or a bulletin board. Its only job is to provide proof of communication.
+
+What it does: It records a unique "fingerprint" (a hash) of every encrypted message that is sent. It also records who sent it, who it was for, and when it was sent.
+
+What it DOES NOT do: It never sees or stores the actual content of your messages. This is crucial for privacy and keeps costs low.
+
+By doing this, the blockchain provides a tamper-proof ledger that can verify a message was sent, without ever knowing what the message said.
+
+2. The Off-Chain Component: The Secure Messenger
+The Web Application is what the user interacts with in their browser. It handles all the sensitive operations locally on the user's computer.
+
+User Identity: It uses MetaMask to manage the user's blockchain identity securely.
+
+Encryption: When a user writes a message, the app uses a Shared Secret Key and the AES algorithm to encrypt the message before it goes anywhere.
+
+Storage: The fully encrypted message is stored temporarily in the browser's localStorage. The website sends only the hash of this message to the smart contract.
+
+Decryption: When the app is notified of a new message (by listening to the smart contract), it retrieves the encrypted message from localStorage and uses the same Shared Secret Key to decrypt and display it to the user.
+
+Summary of the User Flow
+User A and User B connect their wallets to the web app.
+
+They agree on a secret key (like a password) that only they know.
+
+User A types "Hello", encrypts it with the secret key, and hits send.
+
+The app sends the proof (hash) to the blockchain and stores the encrypted message locally.
+
+User B's app gets a notification from the blockchain, finds the encrypted message, and uses the secret key to decrypt and read "Hello".
