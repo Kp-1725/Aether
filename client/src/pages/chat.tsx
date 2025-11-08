@@ -140,8 +140,13 @@ export default function Chat() {
 
   // Send message mutation
   const sendMessageMutation = useMutation({
-    mutationFn: async ({ roomId, content }: { roomId: string; content: string }) => {
-      if (!walletState.address) throw new Error("Wallet not connected");
+    mutationFn: async ({ roomId, content, senderOverride }: { 
+      roomId: string; 
+      content: string;
+      senderOverride?: string;
+    }) => {
+      const sender = senderOverride || walletState.address;
+      if (!sender) throw new Error("No sender address available");
       
       const key = encryptionKeys[roomId];
       if (!key) throw new Error("No encryption key set for this room");
@@ -150,7 +155,7 @@ export default function Chat() {
       const messageHash = hashMessage(encryptedContent);
 
       const res = await apiRequest("POST", `/api/rooms/${roomId}/messages`, {
-        sender: walletState.address,
+        sender,
         encryptedContent,
         hash: messageHash,
         verified: "false",
@@ -201,15 +206,6 @@ export default function Chat() {
   };
 
   const handleSendMessage = (content: string) => {
-    if (!walletState.address) {
-      toast({
-        title: "Wallet Not Connected",
-        description: "Please connect your wallet to send messages",
-        variant: "destructive",
-      });
-      return;
-    }
-
     if (!activeRoomId) {
       toast({
         title: "No Room Selected",
@@ -229,7 +225,21 @@ export default function Chat() {
       return;
     }
 
-    sendMessageMutation.mutate({ roomId: activeRoomId, content });
+    // Use wallet address if connected, otherwise use a temporary anonymous ID
+    const senderAddress = walletState.address || `anon_${Math.random().toString(36).substr(2, 9)}`;
+    
+    if (!walletState.address) {
+      toast({
+        title: "Sending Anonymously",
+        description: "Connect wallet for blockchain verification",
+      });
+    }
+
+    sendMessageMutation.mutate({ 
+      roomId: activeRoomId, 
+      content,
+      senderOverride: senderAddress 
+    });
   };
 
   const handleCreateRoom = (roomName: string) => {
@@ -324,7 +334,7 @@ export default function Chat() {
           </main>
           <MessageInput 
             onSend={handleSendMessage}
-            disabled={!walletState.connected || !activeRoomId || sendMessageMutation.isPending}
+            disabled={!activeRoomId || sendMessageMutation.isPending}
             encrypted={activeRoomId ? !!encryptionKeys[activeRoomId] : false}
           />
         </div>
