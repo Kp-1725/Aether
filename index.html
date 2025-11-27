@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Aether – Decentralized Chat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<style>
+/* ============ ROOT COLORS ============ */
+:root {
+  --bg: #0a0c10;
+  --grid-line: rgba(255,255,255,0.04);
+  --soft-line: rgba(255,255,255,0.07);
+  --accent: #00f6a1;
+  --accent-soft: rgba(0, 246, 161, 0.15);
+  --accent-blue: #00d9ff;
+  --text-main: #e9edf1;
+  --text-soft: #a9b0bb;
+  --card-bg: rgba(16,19,25,0.9);
+  --radius-lg: 22px;
+  --shadow-soft: 0 22px 45px rgba(0,0,0,0.6);
+}
+
+/* ========= RESET ========= */
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
+  color: var(--text-main);
+  background: var(--bg);
+  min-height: 100vh;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* ===== BACKGROUND – LINES & GRID ===== */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Matrix-like thin grid */
+body::before {
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 58px 58px;
+  z-index: -3;
+}
+
+/* Subtle diagonal strokes */
+body::after {
+  background-image:
+    linear-gradient(135deg, transparent 60%, var(--soft-line) 70%, transparent 80%);
+  background-size: 300px 300px;
+  opacity: 0.35;
+  z-index: -2;
+}
+
+/* ====== PAGE WRAPPER ====== */
+.page-wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+}
+
+/* ===== HERO ===== */
+.hero {
+  min-height: 90vh;
+  display:flex;
+  align-items:center;
+  gap:40px;
+  position:relative;
+}
+
+.hero::before {
+  content:"";
+  position:absolute;
+  inset:-200px 10% auto;
+  background: radial-gradient(circle at top, rgba(0, 246, 161, 0.4), transparent 65%);
+  opacity:0.45;
+  z-index:-1;
+}
+
+.hero-left,.hero-right { flex:1; }
+
+.hero-kicker {
+  display:inline-flex; align-items:center; gap:8px;
+  padding:4px 10px; border-radius:999px;
+  background: rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.15);
+  font-size:11px; letter-spacing:0.14em; text-transform:uppercase;
+  color:var(--text-soft); margin-bottom:16px;
+}
+.hero-kicker-dot { width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 6px var(--accent-soft); }
+
+.hero-title { font-size:clamp(40px,4vw,52px); line-height:1.05; letter-spacing:-0.04em; margin-bottom:14px;}
+.hero-title span { background:linear-gradient(120deg, var(--accent), var(--accent-blue)); -webkit-background-clip:text; color:transparent; }
+
+.hero-subtitle { font-size:16px; line-height:1.7; color:var(--text-soft); max-width:36rem; margin-bottom:24px;}
+.hero-subnote { font-size:12px; color:var(--text-soft); margin-top:10px; opacity:0.9;}
+
+.hero-actions { display:flex; gap:12px; flex-wrap:wrap;}
+
+.btn {
+  display:inline-flex; align-items:center; justify-content:center;
+  padding:10px 18px; border-radius:999px;
+  font-size:14px; font-weight:500; text-decoration:none; cursor:pointer;
+  border:1px solid transparent;
+  transition:.16s ease;
+}
+.btn-primary {
+  background: linear-gradient(120deg, var(--accent), var(--accent-blue));
+  color:#00100d; box-shadow:0 14px 30px rgba(0,246,161,0.3);
+}
+.btn-primary:hover { transform:translateY(-2px); }
+.btn-ghost {
+  background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.15);
+  color:var(--text-main);
+}
+.btn-ghost:hover { border-color:var(--accent); }
+
+.btn-icon { font-size:16px; margin-left:2px; }
+
+.btn-glow {
+  animation: glow 2.5s infinite;
+}
+
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 0 6px var(--accent-soft);
+    border-color: var(--accent);
+  }
+  50% {
+    box-shadow: 0 0 22px var(--accent-soft), 0 0 12px var(--accent);
+    border-color: var(--accent);
+  }
+}
+
+/* CHAT CARD */
+.hero-right { display:flex; justify-content:center; align-items:center; }
+
+.hero-card {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 18px 18px 16px;
+  border: 1px solid rgba(255,255,255,0.13);
+  box-shadow: var(--shadow-soft);
+  max-width: 380px; width:100%; backdrop-filter: blur(14px);
+}
+
+.hero-card-header {
+  display:flex; justify-content:space-between; align-items:center;
+  margin-bottom:14px; font-size:12px; color:var(--text-soft);
+}
+.hero-pill {
+  padding:2px 9px; border-radius:999px;
+  background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.25);
+  font-size:10px; text-transform:uppercase; letter-spacing:0.14em;
+}
+
+.hero-chat { display:flex; flex-direction:column; gap:8px; }
+.bubble-row { display:flex; gap:8px; align-items:flex-end; }
+.bubble-row.me { justify-content:flex-end; }
+
+.avatar {
+  width:26px; height:26px; border-radius:50%;
+  background: radial-gradient(circle at 30% 20%, var(--accent), #0f172a);
+  border:1px solid rgba(255,255,255,0.3);
+}
+
+.bubble {
+  max-width:75%; padding:8px 10px; border-radius:16px; font-size:12px; line-height:1.5;
+}
+.bubble.them {
+  background: rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.2); border-bottom-left-radius:4px;
+}
+.bubble.me {
+  background: linear-gradient(120deg, var(--accent), var(--accent-blue));
+  border-bottom-right-radius:4px; color:#00100d;
+}
+
+.hero-card-footer {
+  margin-top:10px; padding-top:10px;
+  border-top:1px dashed rgba(255,255,255,0.2);
+  display:flex; justify-content:space-between; align-items:center;
+  font-size:11px; color:var(--text-soft);
+}
+.status-dot { width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 4px var(--accent-soft); margin-right:6px; }
+
+/* ===== SECTIONS ===== */
+.section { padding:64px 0; }
+.section-header { margin-bottom:26px; }
+.eyebrow {
+  font-size:11px; letter-spacing:0.16em; text-transform:uppercase;
+  color:var(--accent-blue); margin-bottom:8px;
+}
+.section-title { font-size:24px; letter-spacing:-0.03em; margin-bottom:8px; }
+.section-lead { font-size:14px; color:var(--text-soft); max-width:36rem; }
+
+/* ABOUT / COMPARISON */
+.about-layout { display:grid; grid-template-columns:1.4fr 1fr; gap:30px; }
+
+.about-text p { font-size:14px; line-height:1.75; color:var(--text-soft); margin-bottom:14px; }
+.about-text p strong { color:var(--text-main); font-weight:500; }
+
+.compare-card {
+  background:rgba(16,19,25,0.85);
+  border-radius:var(--radius-lg);
+  border:1px solid rgba(255,255,255,0.15);
+  padding:18px 18px 16px; box-shadow:0 18px 40px rgba(0,0,0,0.65);
+}
+
+.compare-label { font-size:11px; color:var(--text-soft); margin-bottom:6px; }
+.compare-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; font-size:11px; }
+
+.compare-col { padding:8px 9px; border-radius:12px; background:rgba(255,255,255,0.05); }
+.compare-col h4 { font-size:11px; margin-bottom:4px; color:var(--text-main); }
+
+.pill-good { width:6px; height:6px; border-radius:50%; background:var(--accent); }
+.pill-bad { width:6px; height:6px; border-radius:50%; background:#ff6e6e; }
+
+/* HOW IT WORKS FRAME */
+.how-layout { display:grid; grid-template-columns:1.1fr 1.2fr; gap:32px; align-items:flex-start; }
+.how-text p { font-size:14px; line-height:1.75; color:var(--text-soft); margin-bottom:10px; }
+
+.frame {
+  background:rgba(16,19,25,0.95);
+  border-radius:18px; border:1px solid rgba(255,255,255,0.25);
+  box-shadow:var(--shadow-soft); overflow:hidden;
+}
+.frame-topbar {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:8px 12px; background:rgba(0,0,0,0.35);
+  border-bottom:1px solid rgba(255,255,255,0.2);
+  font-size:11px; color:var(--text-soft);
+}
+.frame-dots { display:flex; gap:6px; align-items:center; }
+.dot { width:8px; height:8px; border-radius:50%; background:#f97373; }
+.dot:nth-child(2){ background:#fbbf24; }
+.dot:nth-child(3){ background:#22c55e; }
+.frame-body { padding:16px 16px 18px; font-size:13px; line-height:1.7; }
+.frame-body p { margin-bottom:8px; color:var(--text-soft); }
+.steps li { margin-bottom:6px; }
+.steps span { color:var(--text-main); }
+
+.dummy-note { margin-top:10px; font-size:11px; font-style:italic; color:var(--accent-blue); }
+
+/* CTA */
+.cta { text-align:center; padding-bottom:40px; }
+.cta p { font-size:14px; color:var(--text-soft); margin-bottom:18px; }
+.cta .btn-primary { padding-inline:28px; }
+
+/* ===== HEADER & NAV ===== */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(10, 12, 16, 0.7);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--soft-line);
+}
+
+.nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 14px 20px;
+}
+
+.nav-logo {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-main);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nav-logo img {
+  height: 32px;
+  border-radius: 50%;
+}
+
+.nav-logo span {
+  background: linear-gradient(120deg, var(--accent), var(--accent-blue));
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.nav-link {
+  font-size: 13px;
+  color: var(--text-soft);
+  text-decoration: none;
+  transition: color .16s ease;
+}
+
+.nav-link:hover {
+  color: var(--text-main);
+}
+
+/* FOOTER */
+footer {
+  padding:22px 0 8px; font-size:11px; color:var(--text-soft);
+  text-align:center; border-top:1px solid rgba(255,255,255,0.06); margin-top:18px;
+}
+
+/* RESPONSIVE */
+@media (max-width:900px) {
+.hero { flex-direction:column; padding-top:24px; }
+.hero-right { order:-1; }
+.about-layout,.how-layout { grid-template-columns:1fr; }
+}
+@media (max-width:640px) {
+  .page-wrap { padding-inline:16px; }
+  .hero { min-height:auto; }
+  .nav-links a.nav-link { display: none; }
+}
+</style>
+</head>
+<body>
+<header class="header">
+  <nav class="nav">
+    <a href="#" class="nav-logo">
+      <img src="photo.png" alt="Aether logo">
+      <span>Aether</span>
+    </a>
+    <div class="nav-links">
+      <a href="https://aether-1-xyx4.onrender.com" class="btn btn-primary">Start now→</a>
+    </div>
+  </nav>
+</header>
+<main class="page-wrap">
+
+<!-- === HERO === -->
+<section class="hero">
+  <div class="hero-left">
+    <div class="hero-kicker"><span class="hero-kicker-dot"></span>Decentralized chat for humans</div>
+    <h1 class="hero-title">Meet <span>Aether</span> — your own space in the network.</h1>
+    <p class="hero-subtitle">
+      Aether is a decentralized chat layer. No central owner, no single server,
+      just encrypted packets moving between peers that actually belong to <strong>you</strong>.
+    </p>
+    <div class="hero-actions">
+      <a href="#about" class="btn btn-primary">Why Aether?<span class="btn-icon">↓</span></a>
+      <a href="#how-it-works" class="btn btn-ghost">See how it works</a>
+    </div>
+    <p class="hero-subnote">
+      Messages are encapsulated, encrypted and routed over a distributed network — not locked into one company’s servers.
+    </p>
+  </div>
+
+  <div class="hero-right">
+    <div class="hero-card">
+      <div class="hero-card-header">
+        <span class="hero-pill">Aether Room · #general</span><span>decentralized · E2E</span>
+      </div>
+      <div class="hero-chat">
+        <div class="bubble-row"><div class="avatar"></div><div class="bubble them">
+          anyone else love that we don’t need phone numbers here? 🌌</div></div>
+        <div class="bubble-row me"><div class="bubble me">
+          yup. pure IDs + encryption.<br>packets in, packets out. no gatekeepers.</div></div>
+        <div class="bubble-row"><div class="avatar"></div><div class="bubble them">
+          and my chats don’t sit on some company’s backup forever 😮‍💨</div></div>
+      </div>
+      <div class="hero-card-footer"><span style="display:flex;align-items:center;"><span class="status-dot"></span>nodes online</span><span>latency &lt; 120ms</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- === ABOUT === -->
+<section id="about" class="section">
+  <div class="section-header">
+    <div class="eyebrow">Why Aether?</div>
+    <h2 class="section-title">Decentralized. Encapsulated. Actually yours.</h2>
+    <p class="section-lead">Aether treats every message like a tiny encrypted capsule — wrapped, routed and unwrapped without central ownership.</p>
+  </div>
+
+  <div class="about-layout">
+    <div class="about-text">
+      <p>Traditional messengers like <strong>WhatsApp</strong> or <strong>Telegram</strong> still control the network, identity, and policy. Even with encryption, your communication depends on their servers.</p>
+      <p>In <strong>Aether</strong>, each message is <strong>encapsulated</strong> into an encrypted packet. The network only sees where to send — not what’s inside. It’s <strong>decapsulated</strong> only by the recipient.</p>
+      <p>That means <strong>no single choke point</strong>, limited metadata leakage, and the freedom to move between clients without losing control of your identity.</p>
+    </div>
+
+    <aside class="compare-card">
+      <div class="compare-label">Quick contrast</div>
+      <div class="compare-grid">
+        <div class="compare-col"><h4>WhatsApp</h4><ul>
+          <li><span class="pill-bad"></span> Phone-number identity</li>
+          <li><span class="pill-bad"></span> Centralized servers</li>
+          <li><span class="pill-bad"></span> Restricted ecosystem</li>
+        </ul></div>
+        <div class="compare-col"><h4>Telegram</h4><ul>
+          <li><span class="pill-bad"></span> Cloud-dependent</li>
+          <li><span class="pill-bad"></span> Mixed encryption</li>
+          <li><span class="pill-bad"></span> Corporate control</li>
+        </ul></div>
+        <div class="compare-col"><h4>Aether</h4><ul>
+          <li><span class="pill-good"></span> Decentralized routing</li>
+          <li><span class="pill-good"></span> Encapsulation/decapsulation</li>
+          <li><span class="pill-good"></span> Protocol, not an app</li>
+        </ul></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- === HOW IT WORKS === -->
+<section id="how-it-works" class="section">
+  <div class="section-header">
+    <div class="eyebrow">How it works</div>
+    <h2 class="section-title">From tap → packet → human.</h2>
+    <p class="section-lead">This frame shows the flow. Replace with your technical spec later.</p>
+  </div>
+
+  <div class="how-layout">
+    <div class="how-text">
+      <p>Aether breaks the journey into two phases: <strong>encapsulation</strong> (message becomes encrypted network packet) and <strong>decapsulation</strong> (recipient reconstructs it).</p>
+      <p>Between them is just routing: nodes forward sealed capsules without opening them. You can add your layer breakdown here later.</p>
+    </div>
+
+    <div class="frame">
+      <div class="frame-topbar"><div class="frame-dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div><span>Working procedure · Aether</span><span>▢</span></div>
+      <div class="frame-body">
+        <p><strong>[Dummy text – Replace later]</strong></p>
+        <ol class="steps">
+          <li><span>Input:</span> User writes a message; metadata attached.</li>
+          <li><span>Encapsulation:</span> Message encrypted + wrapped.</li>
+          <li><span>Routing:</span> Nodes forward capsules blindly.</li>
+          <li><span>Decapsulation:</span> Recipient unwraps + decrypts.</li>
+          <li><span>Render/Store:</span> Message displayed locally; storage chooseable.</li>
+        </ol>
+        <p class="dummy-note">Edit this text to match your protocol.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- === CTA === -->
+<section class="section cta">
+  <div class="section-header"><div class="eyebrow">Jump in</div><h2 class="section-title">Ready to start your own room?</h2></div>
+  <p>Point Aether to your room. You control it, not us.</p>
+  <a href="https://aether-a5pg.onrender.com" class="btn btn-primary">Start now <span class="btn-icon">→</span></a>
+</section>
+
+<footer>Aether · a clean decentralized chat landing page. Customize as you build.</footer>
+
+</main>
+</body>
+</html>
