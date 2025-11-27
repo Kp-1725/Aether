@@ -1,48 +1,162 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
+import { randomUUID } from "crypto";
 import { storage } from "./storage";
 import { insertRoomSchema, insertMessageSchema } from "@shared/schema";
+import { verifySignedMessage } from "./crypto";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
-  const wss = new WebSocketServer({ 
+  const signalingWss = new WebSocketServer({
     server: httpServer,
-    path: "/ws"
+    path: "/signal",
   });
 
-  // Store active WebSocket connections
-  const clients = new Set<WebSocket>();
+  // --- WebRTC signaling server (P2P mode) ---
 
-  // WebSocket connection handler
-  wss.on("connection", (ws: WebSocket) => {
-    clients.add(ws);
-    console.log("Chat WebSocket client connected");
+  interface SignalJoinRoom {
+    type: "join-room";
+    roomId: string;
+    peerId: string;
+  }
+
+  interface SignalOffer {
+    type: "signal-offer";
+    roomId: string;
+    from: string;
+    to: string;
+    sdp: unknown;
+  }
+
+  interface SignalAnswer {
+    type: "signal-answer";
+    roomId: string;
+    from: string;
+    to: string;
+    sdp: unknown;
+  }
+
+  interface SignalIceCandidate {
+    type: "signal-ice-candidate";
+    roomId: string;
+    from: string;
+    to: string;
+    candidate: unknown;
+  }
+
+  type SignalMessage =
+    | SignalJoinRoom
+    | SignalOffer
+    | SignalAnswer
+    | SignalIceCandidate;
+
+  const roomPeers = new Map<string, Set<WebSocket>>();
+  const socketRoom = new Map<WebSocket, string>();
+  const socketId = new Map<WebSocket, string>();
+
+  signalingWss.on("connection", (ws: WebSocket) => {
+    const id = randomUUID();
+    socketId.set(ws, id);
+
+    ws.on("message", (data) => {
+      try {
+        const parsed = JSON.parse(data.toString()) as SignalMessage;
+
+        if (parsed.type === "join-room") {
+          const { roomId } = parsed;
+          socketRoom.set(ws, roomId);
+          let peers = roomPeers.get(roomId);
+          if (!peers) {
+            peers = new Set();
+            roomPeers.set(roomId, peers);
+          }
+          peers.add(ws);
+
+          const peersInfo = Array.from(peers)
+            .map((peer) => socketId.get(peer))
+            .filter((peerId): peerId is string => Boolean(peerId));
+
+          ws.send(
+            JSON.stringify({
+              type: "room-peers",
+              roomId,
+              peerId: id,
+              peers: peersInfo,
+            })
+          );
+
+          peers.forEach((peer) => {
+            if (peer !== ws && peer.readyState === WebSocket.OPEN) {
+              const targetId = socketId.get(peer);
+              if (!targetId) return;
+              peer.send(
+                JSON.stringify({
+                  type: "peer-joined",
+                  roomId,
+                  peerId: id,
+                })
+              );
+            }
+          });
+          return;
+        }
+
+        if (
+          parsed.type === "signal-offer" ||
+          parsed.type === "signal-answer" ||
+          parsed.type === "signal-ice-candidate"
+        ) {
+          const targetSocket = Array.from(socketId.entries()).find(
+            ([, value]) => value === parsed.to
+          )?.[0];
+          if (targetSocket && targetSocket.readyState === WebSocket.OPEN) {
+            targetSocket.send(
+              JSON.stringify({
+                ...parsed,
+                from: socketId.get(ws),
+              })
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Error handling signaling message", err);
+      }
+    });
 
     ws.on("close", () => {
-      clients.delete(ws);
-      console.log("Chat WebSocket client disconnected");
+      const roomId = socketRoom.get(ws);
+      const idToRemove = socketId.get(ws);
+      socketRoom.delete(ws);
+      socketId.delete(ws);
+
+      if (roomId) {
+        const peers = roomPeers.get(roomId);
+        if (peers) {
+          peers.delete(ws);
+          if (peers.size === 0) {
+            roomPeers.delete(roomId);
+          } else {
+            peers.forEach((peer) => {
+              if (peer.readyState === WebSocket.OPEN && idToRemove) {
+                peer.send(
+                  JSON.stringify({
+                    type: "peer-left",
+                    roomId,
+                    peerId: idToRemove,
+                  })
+                );
+              }
+            });
+          }
+        }
+      }
     });
 
     ws.on("error", (error) => {
-      console.error("Chat WebSocket error:", error);
+      console.error("Signaling WebSocket error:", error);
     });
   });
-
-  // Broadcast message to all connected clients
-  function broadcastMessage(roomId: string, message: any) {
-    const payload = JSON.stringify({
-      type: "new_message",
-      roomId,
-      message,
-    });
-
-    clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(payload);
-      }
-    });
-  }
 
   // Room routes
   app.get("/api/rooms", async (req, res) => {
@@ -62,8 +176,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(room);
     } catch (error: any) {
       console.error("Error creating room:", error);
-      if (error.name === 'ZodError') {
-        return res.status(400).json({ error: "Invalid room data", details: error.errors });
+      if (error.name === "ZodError") {
+        return res
+          .status(400)
+          .json({ error: "Invalid room data", details: error.errors });
       }
       res.status(500).json({ error: "Internal server error" });
     }
@@ -84,29 +200,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/rooms/:roomId/messages", async (req, res) => {
     try {
       const { roomId } = req.params;
-      
+
       // Check if room exists
       const room = await storage.getRoom(roomId);
       if (!room) {
         return res.status(404).json({ error: "Room not found" });
       }
-      
+
       const messageData = {
         ...req.body,
         roomId,
       };
-      
+
       const validatedData = insertMessageSchema.parse(messageData);
+
+      const isValid = verifySignedMessage({
+        ciphertext: validatedData.encryptedContent,
+        hash: validatedData.hash,
+        signature: validatedData.signature ?? "",
+        sender: validatedData.sender,
+      });
+
+      if (!isValid) {
+        return res
+          .status(400)
+          .json({ error: "Invalid message signature or hash" });
+      }
+
       const message = await storage.createMessage(validatedData);
-      
-      // Broadcast to all connected WebSocket clients
-      broadcastMessage(roomId, message);
-      
       res.status(201).json(message);
     } catch (error: any) {
       console.error("Error creating message:", error);
-      if (error.name === 'ZodError') {
-        return res.status(400).json({ error: "Invalid message data", details: error.errors });
+      if (error.name === "ZodError") {
+        return res
+          .status(400)
+          .json({ error: "Invalid message data", details: error.errors });
       }
       res.status(500).json({ error: "Internal server error" });
     }
@@ -117,7 +245,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const { verified, txHash } = req.body;
-      
+
       await storage.updateMessageVerification(id, verified, txHash);
       res.json({ success: true });
     } catch (error) {
