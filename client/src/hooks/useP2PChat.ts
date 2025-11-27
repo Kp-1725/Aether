@@ -14,6 +14,7 @@ interface P2PMessageWire {
   id: string;
   roomId: string;
   sender: string;
+  senderAvatar?: string;
   ciphertext: string;
   hash: string;
   signature: string;
@@ -29,6 +30,7 @@ interface P2PPeerInfo {
 interface UseP2PChatOptions {
   roomId: string | null;
   sharedKey: string | null;
+  userAvatar?: string;
 }
 
 interface UseP2PChatResult {
@@ -41,6 +43,7 @@ interface UseP2PChatResult {
 export function useP2PChat({
   roomId,
   sharedKey,
+  userAvatar,
 }: UseP2PChatOptions): UseP2PChatResult {
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>("disconnected");
@@ -53,6 +56,8 @@ export function useP2PChat({
   const localPeerIdRef = useRef<string | null>(null);
   // Use a ref to always have access to the current sharedKey in callbacks
   const sharedKeyRef = useRef<string | null>(sharedKey);
+  // Keep avatar ref for use in callbacks
+  const userAvatarRef = useRef<string | undefined>(userAvatar);
 
   // Keep the ref in sync with the prop
   useEffect(() => {
@@ -62,6 +67,11 @@ export function useP2PChat({
       sharedKey ? `"${sharedKey}"` : "null"
     );
   }, [sharedKey]);
+
+  // Keep avatar ref in sync
+  useEffect(() => {
+    userAvatarRef.current = userAvatar;
+  }, [userAvatar]);
 
   const signalUrl = useMemo(() => {
     if (typeof window === "undefined") return null;
@@ -288,6 +298,7 @@ export function useP2PChat({
           content: decrypted,
           timestamp: new Date(wire.timestamp),
           verified,
+          senderAvatar: wire.senderAvatar,
         };
         setMessages((prev) => [...prev, uiMessage]);
       } catch (err) {
@@ -390,6 +401,7 @@ export function useP2PChat({
       id: crypto.randomUUID(),
       roomId,
       sender: signed.sender,
+      senderAvatar: userAvatarRef.current,
       ciphertext: signed.ciphertext,
       hash: signed.hash,
       signature: signed.signature,
@@ -410,6 +422,7 @@ export function useP2PChat({
       content: plaintext,
       timestamp: new Date(wire.timestamp),
       verified: true,
+      senderAvatar: userAvatarRef.current,
     };
     setMessages((prev) => [...prev, uiMessage]);
 
