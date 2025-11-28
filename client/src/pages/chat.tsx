@@ -14,6 +14,7 @@ import { WalletConnectionDialog } from "@/components/wallet-connection-dialog";
 import { RoomCreationDialog } from "@/components/room-creation-dialog";
 import { KeyManagementDialog } from "@/components/key-management-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
+import { FileTransferProgressBar } from "@/components/file-transfer-progress";
 import { connectWallet, disconnectWallet, type WalletState } from "@/lib/web3";
 import { useP2PChat } from "@/hooks/useP2PChat";
 import { useToast } from "@/hooks/use-toast";
@@ -22,6 +23,7 @@ import { useSoundEffects } from "@/hooks/useSoundEffects";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useUserAvatar } from "@/components/avatar-selection-dialog";
 import type { Room } from "@shared/schema";
+import type { FileAttachment } from "@/components/file-attachment";
 
 const ENCRYPTION_KEY_STORAGE_PREFIX = "encryption_key_";
 const PINNED_MESSAGES_PREFIX = "pinned_messages_";
@@ -155,13 +157,14 @@ export default function Chat() {
     messages: p2pMessages,
     connectionStatus: p2pStatus,
     sendMessage: sendP2PMessage,
+    fileTransfers,
   } = useP2PChat({
     roomId: activeRoomId,
     sharedKey: activeRoomKey,
     userAvatar: avatar,
   });
 
-  const handleSendMessage = (content: string) => {
+  const handleSendMessage = (content: string, file?: FileAttachment) => {
     if (!activeRoomId) {
       toast({
         title: "No Room Selected",
@@ -181,7 +184,7 @@ export default function Chat() {
       return;
     }
 
-    sendP2PMessage(content).catch((error: any) => {
+    sendP2PMessage(content, file).catch((error: any) => {
       toast({
         title: "Error",
         description: error.message || "Failed to send P2P message",
@@ -412,6 +415,9 @@ export default function Chat() {
         open={settingsDialogOpen}
         onOpenChange={setSettingsDialogOpen}
       />
+
+      {/* File Transfer Progress */}
+      <FileTransferProgressBar transfers={fileTransfers} />
     </SidebarProvider>
   );
 }

@@ -9,9 +9,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { EmojiPicker } from "@/components/emoji-picker";
+import {
+  FileAttachmentButton,
+  FilePreview,
+  type FileAttachment,
+} from "@/components/file-attachment";
 
 interface MessageInputProps {
-  onSend: (message: string) => void;
+  onSend: (message: string, file?: FileAttachment) => void;
   disabled?: boolean;
   encrypted?: boolean;
 }
@@ -22,12 +27,14 @@ export function MessageInput({
   encrypted = true,
 }: MessageInputProps) {
   const [message, setMessage] = useState("");
+  const [attachedFile, setAttachedFile] = useState<FileAttachment | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSend = () => {
-    if (message.trim()) {
-      onSend(message);
+    if (message.trim() || attachedFile) {
+      onSend(message, attachedFile || undefined);
       setMessage("");
+      setAttachedFile(null);
     }
   };
 
@@ -40,7 +47,11 @@ export function MessageInput({
 
   const handleEmojiSelect = (emoji: string) => {
     setMessage((prev) => prev + emoji);
-    // Focus back on textarea after emoji selection
+    textareaRef.current?.focus();
+  };
+
+  const handleFileSelect = (file: FileAttachment) => {
+    setAttachedFile(file);
     textareaRef.current?.focus();
   };
 
@@ -62,8 +73,24 @@ export function MessageInput({
           </TooltipContent>
         </Tooltip>
       </div>
+
+      {/* File Preview */}
+      {attachedFile && (
+        <div className="mb-3">
+          <FilePreview
+            file={attachedFile}
+            onRemove={() => setAttachedFile(null)}
+            isCompact
+          />
+        </div>
+      )}
+
       <div className="flex gap-2 items-end">
         <div className="flex-1 flex gap-2 items-end">
+          <FileAttachmentButton
+            onFileSelect={handleFileSelect}
+            disabled={disabled}
+          />
           <EmojiPicker onEmojiSelect={handleEmojiSelect} />
           <Textarea
             ref={textareaRef}
@@ -78,7 +105,7 @@ export function MessageInput({
         </div>
         <Button
           onClick={handleSend}
-          disabled={disabled || !message.trim()}
+          disabled={disabled || (!message.trim() && !attachedFile)}
           size="icon"
           className="h-[60px] w-[60px]"
           data-testid="button-send-message"

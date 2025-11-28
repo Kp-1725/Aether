@@ -2,6 +2,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { MessageBubble } from "./message-bubble";
 import { useEffect, useRef } from "react";
 import { Pin } from "lucide-react";
+import type { FileAttachment } from "./file-attachment";
 
 export interface Message {
   id: string;
@@ -11,6 +12,7 @@ export interface Message {
   verified: boolean;
   senderAvatar?: string;
   isPinned?: boolean;
+  file?: FileAttachment;
 }
 
 interface MessageListProps {
@@ -107,6 +109,7 @@ export function MessageList({
               isOwnMessage={isOwnMessage}
               senderAvatar={isOwnMessage ? userAvatar : message.senderAvatar}
               isPinned={message.isPinned}
+              file={message.file}
               onPin={onPinMessage ? () => onPinMessage(message.id) : undefined}
               onUnpin={
                 onUnpinMessage ? () => onUnpinMessage(message.id) : undefined

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { FilePreview, type FileAttachment } from "@/components/file-attachment";
 
 interface MessageBubbleProps {
   id: string;
@@ -25,6 +26,7 @@ interface MessageBubbleProps {
   isOwnMessage: boolean;
   senderAvatar?: string;
   isPinned?: boolean;
+  file?: FileAttachment;
   onPin?: () => void;
   onUnpin?: () => void;
 }
@@ -38,6 +40,7 @@ export function MessageBubble({
   isOwnMessage,
   senderAvatar,
   isPinned,
+  file,
   onPin,
   onUnpin,
 }: MessageBubbleProps) {
@@ -105,12 +108,21 @@ export function MessageBubble({
                 isOwnMessage ? "bg-primary text-primary-foreground" : ""
               } ${isPinned ? "ring-1 ring-primary/50" : ""}`}
             >
-              <p
-                className="text-sm whitespace-pre-wrap break-words"
-                data-testid="text-message-content"
-              >
-                {content}
-              </p>
+              {/* File attachment */}
+              {file && (
+                <div className="mb-2">
+                  <FilePreview file={file} />
+                </div>
+              )}
+              {/* Text content */}
+              {content && (
+                <p
+                  className="text-sm whitespace-pre-wrap break-words"
+                  data-testid="text-message-content"
+                >
+                  {content}
+                </p>
+              )}
             </Card>
 
             {/* Message actions */}

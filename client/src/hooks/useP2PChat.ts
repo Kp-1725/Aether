@@ -1,12 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import type { Message as DbMessage } from "@shared/schema";
 import type { Message as UIMessage } from "@/components/message-list";
+import type { FileAttachment } from "@/components/file-attachment";
 import {
   decryptWithSharedKey,
   encryptWithSharedKey,
   getWalletSigner,
   signEncryptedPayload,
 } from "@/lib/crypto";
+import {
+  useFileTransfer,
+  type FileTransferProgress,
+} from "@/hooks/useFileTransfer";
 
 type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error";
 
@@ -19,6 +24,13 @@ interface P2PMessageWire {
   hash: string;
   signature: string;
   timestamp: number;
+  file?: {
+    id: string;
+    name: string;
+    size: number;
+    type: string;
+    data: string;
+  };
 }
 
 interface P2PPeerInfo {
@@ -37,7 +49,8 @@ interface UseP2PChatResult {
   messages: UIMessage[];
   peers: P2PPeerInfo[];
   connectionStatus: ConnectionStatus;
-  sendMessage: (plaintext: string) => Promise<void>;
+  sendMessage: (plaintext: string, file?: FileAttachment) => Promise<void>;
+  fileTransfers: FileTransferProgress[];
 }
 
 export function useP2PChat({
@@ -50,6 +63,14 @@ export function useP2PChat({
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [peers, setPeers] = useState<P2PPeerInfo[]>([]);
 
+  const {
+    transfers: fileTransfers,
+    sendFileChunked,
+    handleIncomingChunk,
+    isFileTransferMessage,
+    setOnFileReceived,
+  } = useFileTransfer();
+
   const signalingRef = useRef<WebSocket | null>(null);
   const peerConnections = useRef<Map<string, RTCPeerConnection>>(new Map());
   const dataChannels = useRef<Map<string, RTCDataChannel>>(new Map());
@@ -58,6 +79,10 @@ export function useP2PChat({
   const sharedKeyRef = useRef<string | null>(sharedKey);
   // Keep avatar ref for use in callbacks
   const userAvatarRef = useRef<string | undefined>(userAvatar);
+  // Pending file messages waiting for file transfer to complete
+  const pendingFileMessagesRef = useRef<
+    Map<string, { wire: P2PMessageWire; sender: string }>
+  >(new Map());
 
   // Keep the ref in sync with the prop
   useEffect(() => {
@@ -72,6 +97,33 @@ export function useP2PChat({
   useEffect(() => {
     userAvatarRef.current = userAvatar;
   }, [userAvatar]);
+
+  // Handle received files from chunked transfer
+  useEffect(() => {
+    setOnFileReceived((file) => {
+      // Find pending message for this file
+      const pending = pendingFileMessagesRef.current.get(file.id);
+      if (pending) {
+        // Update the message with the complete file
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === pending.wire.id
+              ? {
+                  ...msg,
+                  file: {
+                    ...file,
+                    preview: file.type.startsWith("image/")
+                      ? file.data
+                      : undefined,
+                  } as FileAttachment,
+                }
+              : msg
+          )
+        );
+        pendingFileMessagesRef.current.delete(file.id);
+      }
+    });
+  }, [setOnFileReceived]);
 
   const signalUrl = useMemo(() => {
     if (typeof window === "undefined") return null;
@@ -260,7 +312,16 @@ export function useP2PChat({
     channel.onmessage = (event) => {
       console.log("[P2P] Received message on DataChannel from", peerId);
       try {
-        const wire = JSON.parse(event.data) as P2PMessageWire;
+        const data = JSON.parse(event.data);
+
+        // Check if this is a file transfer message
+        if (isFileTransferMessage(data)) {
+          handleIncomingChunk(data);
+          return;
+        }
+
+        // Regular message
+        const wire = data as P2PMessageWire;
         const currentKey = sharedKeyRef.current;
 
         console.log(
@@ -292,6 +353,14 @@ export function useP2PChat({
           verified = false;
         }
 
+        // If message has a file reference, store it for when file transfer completes
+        if (wire.file?.id && !wire.file.data) {
+          pendingFileMessagesRef.current.set(wire.file.id, {
+            wire,
+            sender: wire.sender,
+          });
+        }
+
         const uiMessage: UIMessage = {
           id: wire.id,
           sender: wire.sender,
@@ -299,6 +368,7 @@ export function useP2PChat({
           timestamp: new Date(wire.timestamp),
           verified,
           senderAvatar: wire.senderAvatar,
+          file: wire.file as FileAttachment | undefined,
         };
         setMessages((prev) => [...prev, uiMessage]);
       } catch (err) {
@@ -379,7 +449,10 @@ export function useP2PChat({
     });
   }
 
-  async function sendMessage(plaintext: string): Promise<void> {
+  async function sendMessage(
+    plaintext: string,
+    file?: FileAttachment
+  ): Promise<void> {
     if (!roomId) return;
     if (!sharedKey) {
       throw new Error("No shared encryption key for this room");
@@ -388,7 +461,7 @@ export function useP2PChat({
     console.log("[P2P] Sending message with key:", `"${sharedKey}"`);
 
     const signer = await getWalletSigner();
-    const encrypted = encryptWithSharedKey(plaintext, sharedKey);
+    const encrypted = encryptWithSharedKey(plaintext || "[File]", sharedKey);
 
     console.log(
       "[P2P] Encrypted ciphertext preview:",
@@ -396,6 +469,9 @@ export function useP2PChat({
     );
 
     const signed = await signEncryptedPayload(encrypted, signer);
+
+    // For large files (>1MB), use chunked transfer
+    const useChunkedTransfer = file && file.size > 1024 * 1024;
 
     const wire: P2PMessageWire = {
       id: crypto.randomUUID(),
@@ -406,15 +482,42 @@ export function useP2PChat({
       hash: signed.hash,
       signature: signed.signature,
       timestamp: Date.now(),
+      file: file
+        ? {
+            id: file.id,
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            // For chunked transfer, don't include data in the message
+            data: useChunkedTransfer ? "" : file.data,
+          }
+        : undefined,
     };
 
     const payload = JSON.stringify(wire);
 
+    // Send message to all peers
+    const openChannels: RTCDataChannel[] = [];
     dataChannels.current.forEach((channel) => {
       if (channel.readyState === "open") {
         channel.send(payload);
+        openChannels.push(channel);
       }
     });
+
+    // If using chunked transfer, send file chunks after the message
+    if (useChunkedTransfer && file && openChannels.length > 0) {
+      const sendChunk = (chunkPayload: string) => {
+        openChannels.forEach((channel) => {
+          if (channel.readyState === "open") {
+            channel.send(chunkPayload);
+          }
+        });
+      };
+
+      // Send file in chunks with progress tracking
+      await sendFileChunked(file, sendChunk);
+    }
 
     const uiMessage: UIMessage = {
       id: wire.id,
@@ -423,6 +526,7 @@ export function useP2PChat({
       timestamp: new Date(wire.timestamp),
       verified: true,
       senderAvatar: userAvatarRef.current,
+      file: file,
     };
     setMessages((prev) => [...prev, uiMessage]);
 
@@ -450,5 +554,6 @@ export function useP2PChat({
     peers,
     connectionStatus,
     sendMessage,
+    fileTransfers,
   };
 }
