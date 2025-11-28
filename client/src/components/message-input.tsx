@@ -86,7 +86,7 @@ export function MessageInput({
       )}
 
       <div className="flex gap-2 items-end">
-        <div className="flex-1 flex gap-2 items-end">
+        <div className="flex-1 flex gap-1 sm:gap-2 items-end">
           <FileAttachmentButton
             onFileSelect={handleFileSelect}
             disabled={disabled}
@@ -94,12 +94,12 @@ export function MessageInput({
           <EmojiPicker onEmojiSelect={handleEmojiSelect} />
           <Textarea
             ref={textareaRef}
-            placeholder="Type your message... (Shift+Enter for new line)"
+            placeholder="Type a message..."
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={disabled}
-            className="resize-none min-h-[60px] flex-1"
+            className="resize-none min-h-[44px] sm:min-h-[60px] flex-1 text-sm sm:text-base"
             data-testid="input-message"
           />
         </div>
@@ -107,10 +107,10 @@ export function MessageInput({
           onClick={handleSend}
           disabled={disabled || (!message.trim() && !attachedFile)}
           size="icon"
-          className="h-[60px] w-[60px]"
+          className="h-[44px] w-[44px] sm:h-[60px] sm:w-[60px]"
           data-testid="button-send-message"
         >
-          <Send className="h-5 w-5" />
+          <Send className="h-4 w-4 sm:h-5 sm:w-5" />
         </Button>
       </div>
     </div>

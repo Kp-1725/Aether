@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: decentrachat
+    name: Aether
     runtime: node
     plan: free
     buildCommand: npm install --include=dev && npm run build
