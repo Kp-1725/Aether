@@ -71,25 +71,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
             peers = new Set();
             roomPeers.set(roomId, peers);
           }
-          peers.add(ws);
 
-          const peersInfo = Array.from(peers)
+          // Get existing peers BEFORE adding this socket
+          const existingPeers = Array.from(peers)
             .map((peer) => socketId.get(peer))
             .filter((peerId): peerId is string => Boolean(peerId));
 
+          // Now add this socket to the room
+          peers.add(ws);
+
+          // Send existing peers to the new joiner (excluding self)
           ws.send(
             JSON.stringify({
               type: "room-peers",
               roomId,
               peerId: id,
-              peers: peersInfo,
+              peers: existingPeers,
             })
           );
 
+          // Notify existing peers about the new joiner
           peers.forEach((peer) => {
             if (peer !== ws && peer.readyState === WebSocket.OPEN) {
-              const targetId = socketId.get(peer);
-              if (!targetId) return;
               peer.send(
                 JSON.stringify({
                   type: "peer-joined",
