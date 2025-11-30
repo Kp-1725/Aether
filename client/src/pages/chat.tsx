@@ -15,6 +15,10 @@ import { RoomCreationDialog } from "@/components/room-creation-dialog";
 import { KeyManagementDialog } from "@/components/key-management-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { FileTransferProgressBar } from "@/components/file-transfer-progress";
+import {
+  EncryptionAnimation,
+  EncryptionStatus,
+} from "@/components/encryption-indicator";
 import { connectWallet, disconnectWallet, type WalletState } from "@/lib/web3";
 import { useP2PChat } from "@/hooks/useP2PChat";
 import { useToast } from "@/hooks/use-toast";
@@ -54,6 +58,7 @@ export default function Chat() {
   const [keyDialogOpen, setKeyDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [walletError, setWalletError] = useState<string>("");
+  const [isEncrypting, setIsEncrypting] = useState(false);
 
   // Track previous message count to detect new messages
   const prevMessageCountRef = useRef<number>(0);
@@ -362,6 +367,13 @@ export default function Chat() {
                 connected={p2pStatus === "connected"}
                 network="P2P Network"
               />
+              {/* Encryption Status */}
+              {activeRoomId && (
+                <EncryptionStatus
+                  encryptionKey={activeRoomKey}
+                  className="hidden sm:flex"
+                />
+              )}
             </div>
             <div className="flex items-center gap-2">
               <WalletButton
@@ -387,6 +399,7 @@ export default function Chat() {
             onSend={handleSendMessage}
             disabled={!activeRoomId || sendMessageMutation.isPending}
             encrypted={activeRoomId ? !!encryptionKeys[activeRoomId] : false}
+            onEncryptingChange={setIsEncrypting}
           />
         </div>
       </div>
@@ -418,6 +431,9 @@ export default function Chat() {
 
       {/* File Transfer Progress */}
       <FileTransferProgressBar transfers={fileTransfers} />
+
+      {/* Encryption Animation Overlay */}
+      <EncryptionAnimation isVisible={isEncrypting} />
     </SidebarProvider>
   );
 }

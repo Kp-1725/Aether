@@ -1,11 +1,35 @@
+import { useState } from "react";
 import { useLocation } from "wouter";
+import CryptoJS from "crypto-js";
 
 export default function Landing() {
   const [, setLocation] = useLocation();
+  const [demoMessage, setDemoMessage] = useState(
+    "Hello, this is a secret message!"
+  );
+  const [demoKey, setDemoKey] = useState("my-secret-key");
+  const [showEncrypted, setShowEncrypted] = useState(false);
 
   const handleStartNow = (e: React.MouseEvent) => {
     e.preventDefault();
     setLocation("/chat");
+  };
+
+  // Encrypt the demo message
+  const encryptedMessage = CryptoJS.AES.encrypt(
+    demoMessage,
+    demoKey
+  ).toString();
+
+  // Generate key fingerprint
+  const generateFingerprint = (key: string): string => {
+    let hash = 0;
+    for (let i = 0; i < key.length; i++) {
+      const char = key.charCodeAt(i);
+      hash = (hash << 5) - hash + char;
+      hash = hash & hash;
+    }
+    return Math.abs(hash).toString(16).padStart(8, "0").toUpperCase();
   };
 
   return (
@@ -711,6 +735,227 @@ export default function Landing() {
           margin-top: 40px;
         }
 
+        /* ENCRYPTION DEMO */
+        .demo-container {
+          background: var(--card-bg);
+          border-radius: var(--radius-xl);
+          border: 1px solid var(--border-dark);
+          box-shadow: var(--shadow-card);
+          padding: 32px;
+          max-width: 100%;
+          min-width: 450px;
+        }
+
+        .demo-input-group {
+          margin-bottom: 24px;
+        }
+
+        .demo-label {
+          display: block;
+          font-size: 12px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: #888888;
+          margin-bottom: 8px;
+        }
+
+        .demo-input {
+          width: 100%;
+          padding: 14px 18px;
+          border-radius: var(--radius-md);
+          border: 1px solid var(--border-dark);
+          background: rgba(255,255,255,0.06);
+          color: #ffffff;
+          font-size: 14px;
+          font-family: inherit;
+          transition: all 0.2s ease;
+        }
+
+        .demo-input:focus {
+          outline: none;
+          border-color: rgba(255,255,255,0.3);
+          background: rgba(255,255,255,0.1);
+        }
+
+        .demo-input::placeholder {
+          color: #666666;
+        }
+
+        .demo-flow {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          margin-top: 24px;
+        }
+
+        .demo-step {
+          display: flex;
+          align-items: flex-start;
+          gap: 16px;
+          padding: 20px;
+          border-radius: var(--radius-md);
+          background: rgba(255,255,255,0.04);
+          border: 1px solid var(--border-dark);
+          transition: all 0.3s ease;
+        }
+
+        .demo-step.active {
+          background: rgba(74, 222, 128, 0.1);
+          border-color: rgba(74, 222, 128, 0.3);
+        }
+
+        .demo-step-icon {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 18px;
+          flex-shrink: 0;
+          background: rgba(255,255,255,0.08);
+          border: 1px solid var(--border-dark);
+        }
+
+        .demo-step.active .demo-step-icon {
+          background: rgba(74, 222, 128, 0.2);
+          border-color: rgba(74, 222, 128, 0.4);
+        }
+
+        .demo-step-content {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .demo-step-title {
+          font-size: 14px;
+          font-weight: 600;
+          color: #ffffff;
+          margin-bottom: 6px;
+        }
+
+        .demo-step-value {
+          font-family: 'JetBrains Mono', 'Fira Code', monospace;
+          font-size: 12px;
+          color: #b0b0b0;
+          word-break: break-word;
+          overflow-wrap: break-word;
+          line-height: 1.6;
+          padding: 10px 14px;
+          background: rgba(0,0,0,0.3);
+          border-radius: 8px;
+          margin-top: 8px;
+        }
+
+        .demo-step-value.encrypted {
+          color: #4ade80;
+          word-break: break-all;
+        }
+
+        .demo-step-value.network-info {
+          word-break: normal;
+          white-space: normal;
+        }
+
+        .demo-arrow {
+          display: flex;
+          justify-content: center;
+          padding: 8px 0;
+          color: #555555;
+          font-size: 20px;
+        }
+
+        .demo-button {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          width: 100%;
+          padding: 16px;
+          border-radius: var(--radius-md);
+          border: 1px solid var(--border-dark);
+          background: linear-gradient(135deg, #333333 0%, #1a1a1a 100%);
+          color: #ffffff;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.25s ease;
+          margin-top: 20px;
+        }
+
+        .demo-button:hover {
+          background: linear-gradient(135deg, #444444 0%, #2a2a2a 100%);
+          transform: translateY(-2px);
+          box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+
+        .demo-fingerprint {
+          display: inline-flex;
+          gap: 6px;
+          margin-top: 4px;
+        }
+
+        .demo-fingerprint-block {
+          padding: 4px 8px;
+          background: rgba(255,255,255,0.1);
+          border-radius: 4px;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 11px;
+          color: #4ade80;
+        }
+
+        .demo-layout {
+          display: grid;
+          grid-template-columns: 1fr 1.3fr;
+          gap: 40px;
+          align-items: start;
+        }
+
+        .demo-text p {
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--text-soft);
+          margin-bottom: 16px;
+        }
+
+        .demo-text p strong {
+          color: var(--text-main);
+          font-weight: 600;
+        }
+
+        .demo-features {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          margin-top: 24px;
+        }
+
+        .demo-feature {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 12px 16px;
+          background: rgba(255,255,255,0.03);
+          border-radius: var(--radius-md);
+          border: 1px solid var(--border-light);
+        }
+
+        .demo-feature-icon {
+          font-size: 20px;
+        }
+
+        .demo-feature-text {
+          font-size: 14px;
+          color: var(--text-soft);
+        }
+
+        @media (max-width: 900px) {
+          .demo-layout {
+            grid-template-columns: 1fr;
+          }
+        }
+
         /* RESPONSIVE */
         @media (max-width: 900px) {
           .hero {
@@ -997,6 +1242,160 @@ export default function Landing() {
                       </div>
                     </li>
                   </ol>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* ENCRYPTION DEMO */}
+          <section id="encryption-demo" className="section">
+            <div className="section-header">
+              <div className="eyebrow">See It In Action</div>
+              <h2 className="section-title">Live Encryption Demo</h2>
+              <p className="section-lead">
+                Try it yourself — type a message and see how AES-256 encryption
+                transforms it into unreadable ciphertext.
+              </p>
+            </div>
+
+            <div className="demo-layout">
+              <div className="demo-text">
+                <p>
+                  Every message you send through Aether is encrypted using{" "}
+                  <strong>AES-256</strong>, the same encryption standard used by
+                  governments and financial institutions worldwide.
+                </p>
+                <p>
+                  The encryption happens{" "}
+                  <strong>locally in your browser</strong> before the message
+                  ever leaves your device. Only someone with the exact same key
+                  can decrypt and read it.
+                </p>
+                <p>
+                  Even if someone intercepts your message in transit, all they
+                  see is a jumbled string of characters — completely unreadable
+                  without the secret key.
+                </p>
+
+                <div className="demo-features">
+                  <div className="demo-feature">
+                    <span className="demo-feature-icon">🔐</span>
+                    <span className="demo-feature-text">
+                      AES-256 military-grade encryption
+                    </span>
+                  </div>
+                  <div className="demo-feature">
+                    <span className="demo-feature-icon">💻</span>
+                    <span className="demo-feature-text">
+                      Encrypted locally before sending
+                    </span>
+                  </div>
+                  <div className="demo-feature">
+                    <span className="demo-feature-icon">🔑</span>
+                    <span className="demo-feature-text">
+                      Only shared key holders can decrypt
+                    </span>
+                  </div>
+                  <div className="demo-feature">
+                    <span className="demo-feature-icon">👁️</span>
+                    <span className="demo-feature-text">
+                      Zero knowledge — we never see your messages
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="demo-container">
+                <div className="demo-input-group">
+                  <label className="demo-label">Your Message</label>
+                  <input
+                    type="text"
+                    className="demo-input"
+                    value={demoMessage}
+                    onChange={(e) => setDemoMessage(e.target.value)}
+                    placeholder="Type a secret message..."
+                  />
+                </div>
+
+                <div className="demo-input-group">
+                  <label className="demo-label">Encryption Key</label>
+                  <input
+                    type="text"
+                    className="demo-input"
+                    value={demoKey}
+                    onChange={(e) => setDemoKey(e.target.value)}
+                    placeholder="Enter a secret key..."
+                  />
+                  <div className="demo-fingerprint">
+                    <span
+                      style={{
+                        fontSize: "11px",
+                        color: "#666",
+                        marginRight: "8px",
+                        marginTop: "8px",
+                      }}
+                    >
+                      Key Fingerprint:
+                    </span>
+                    {generateFingerprint(demoKey)
+                      .match(/.{1,4}/g)
+                      ?.map((block, i) => (
+                        <span key={i} className="demo-fingerprint-block">
+                          {block}
+                        </span>
+                      ))}
+                  </div>
+                </div>
+
+                <button
+                  className="demo-button"
+                  onClick={() => setShowEncrypted(!showEncrypted)}
+                >
+                  {showEncrypted ? "🔓 Show Original" : "🔒 Encrypt Message"}
+                </button>
+
+                <div className="demo-flow">
+                  <div
+                    className={`demo-step ${!showEncrypted ? "active" : ""}`}
+                  >
+                    <div className="demo-step-icon">📝</div>
+                    <div className="demo-step-content">
+                      <div className="demo-step-title">Original Message</div>
+                      <div className="demo-step-value">
+                        {demoMessage || "(empty)"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="demo-arrow">↓</div>
+
+                  <div className={`demo-step ${showEncrypted ? "active" : ""}`}>
+                    <div className="demo-step-icon">🔐</div>
+                    <div className="demo-step-content">
+                      <div className="demo-step-title">Encrypted (AES-256)</div>
+                      <div className="demo-step-value encrypted">
+                        {encryptedMessage}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="demo-arrow">↓</div>
+
+                  <div className="demo-step">
+                    <div className="demo-step-icon">📡</div>
+                    <div className="demo-step-content">
+                      <div className="demo-step-title">
+                        Sent Over P2P Network
+                      </div>
+                      <div
+                        className="demo-step-value network-info"
+                        style={{ color: "#888" }}
+                      >
+                        Only the encrypted version travels through the network.
+                        No one can read it without your key!
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

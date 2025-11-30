@@ -1,6 +1,13 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Lock, Pin, MoreVertical } from "lucide-react";
+import {
+  CheckCircle2,
+  Lock,
+  Pin,
+  MoreVertical,
+  Shield,
+  ShieldCheck,
+} from "lucide-react";
 import { truncateAddress } from "@/lib/web3";
 import {
   Tooltip,
@@ -160,7 +167,20 @@ export function MessageBubble({
             >
               {timestamp.toLocaleTimeString()}
             </span>
-            <Lock className="h-3 w-3 text-muted-foreground" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1 text-green-500">
+                  <ShieldCheck className="h-3 w-3" />
+                  <Lock className="h-3 w-3" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="flex items-center gap-1.5">
+                  <Shield className="h-3 w-3 text-green-500" />
+                  <span>End-to-end encrypted with AES-256</span>
+                </div>
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
       </div>
