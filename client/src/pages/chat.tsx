@@ -19,11 +19,13 @@ import {
   EncryptionAnimation,
   EncryptionStatus,
 } from "@/components/encryption-indicator";
+import { PrivacyOverlay, PrivacyBadge } from "@/components/privacy-overlay";
 import { connectWallet, disconnectWallet, type WalletState } from "@/lib/web3";
 import { useP2PChat } from "@/hooks/useP2PChat";
 import { useToast } from "@/hooks/use-toast";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useSoundEffects } from "@/hooks/useSoundEffects";
+import { useScreenshotProtection } from "@/hooks/useScreenshotProtection";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useUserAvatar } from "@/components/avatar-selection-dialog";
 import type { Room } from "@shared/schema";
@@ -38,6 +40,16 @@ export default function Chat() {
   const { sendNotification, isEnabled: isNotificationsEnabled } =
     useNotifications();
   const { playSend, playReceive, playPin } = useSoundEffects();
+
+  // Screenshot protection - Snapchat-style content protection
+  const { isBlurred, isProtected, attemptCount } = useScreenshotProtection({
+    enabled: true,
+    blurOnInactive: true,
+    preventSelection: true,
+    preventContextMenu: false, // Allow right-click
+    preventPrint: true,
+    preventDevTools: false, // Set to true for stricter protection
+  });
 
   const [walletState, setWalletState] = useState<WalletState>({
     address: null,
@@ -374,6 +386,12 @@ export default function Chat() {
                   className="hidden sm:flex"
                 />
               )}
+              {/* Privacy Protection Badge */}
+              <PrivacyBadge
+                isProtected={isProtected}
+                attemptCount={attemptCount}
+                className="hidden md:flex"
+              />
             </div>
             <div className="flex items-center gap-2">
               <WalletButton
@@ -434,6 +452,12 @@ export default function Chat() {
 
       {/* Encryption Animation Overlay */}
       <EncryptionAnimation isVisible={isEncrypting} />
+
+      {/* Privacy Protection Overlay - Snapchat style blur when inactive */}
+      <PrivacyOverlay
+        isActive={isBlurred}
+        message="Return to the window to view messages. Content is hidden for privacy protection."
+      />
     </SidebarProvider>
   );
 }

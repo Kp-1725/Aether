@@ -8,6 +8,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { EmojiPicker } from "@/components/emoji-picker";
+import { GifPicker } from "@/components/gif-picker";
 import {
   FileAttachmentButton,
   FilePreview,
@@ -30,11 +31,12 @@ export function MessageInput({
 }: MessageInputProps) {
   const [message, setMessage] = useState("");
   const [attachedFile, setAttachedFile] = useState<FileAttachment | null>(null);
+  const [selectedGif, setSelectedGif] = useState<string | null>(null);
   const [isEncrypting, setIsEncrypting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSend = async () => {
-    if (message.trim() || attachedFile) {
+    if (message.trim() || attachedFile || selectedGif) {
       // Show encryption animation
       if (encrypted) {
         setIsEncrypting(true);
@@ -44,9 +46,15 @@ export function MessageInput({
         await new Promise((resolve) => setTimeout(resolve, 600));
       }
 
-      onSend(message, attachedFile || undefined);
+      // If there's a GIF, send it as part of the message
+      const messageToSend = selectedGif
+        ? `${message}\n![GIF](${selectedGif})`.trim()
+        : message;
+
+      onSend(messageToSend, attachedFile || undefined);
       setMessage("");
       setAttachedFile(null);
+      setSelectedGif(null);
 
       // Hide encryption animation
       setTimeout(() => {
@@ -70,6 +78,13 @@ export function MessageInput({
 
   const handleFileSelect = (file: FileAttachment) => {
     setAttachedFile(file);
+    setSelectedGif(null); // Clear GIF when file is selected
+    textareaRef.current?.focus();
+  };
+
+  const handleGifSelect = (gifUrl: string) => {
+    setSelectedGif(gifUrl);
+    setAttachedFile(null); // Clear file when GIF is selected
     textareaRef.current?.focus();
   };
 
@@ -138,6 +153,25 @@ export function MessageInput({
         )}
       </div>
 
+      {/* GIF Preview */}
+      {selectedGif && (
+        <div className="mb-3 relative inline-block">
+          <img
+            src={selectedGif}
+            alt="Selected GIF"
+            className="max-h-32 rounded-lg border"
+          />
+          <Button
+            variant="destructive"
+            size="icon"
+            className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+            onClick={() => setSelectedGif(null)}
+          >
+            <span className="text-xs">✕</span>
+          </Button>
+        </div>
+      )}
+
       {/* File Preview */}
       {attachedFile && (
         <div className="mb-3">
@@ -153,6 +187,10 @@ export function MessageInput({
         <div className="flex-1 flex gap-1 sm:gap-2 items-end">
           <FileAttachmentButton
             onFileSelect={handleFileSelect}
+            disabled={disabled || isEncrypting}
+          />
+          <GifPicker
+            onGifSelect={handleGifSelect}
             disabled={disabled || isEncrypting}
           />
           <EmojiPicker onEmojiSelect={handleEmojiSelect} />
@@ -177,7 +215,9 @@ export function MessageInput({
             <Button
               onClick={handleSend}
               disabled={
-                disabled || isEncrypting || (!message.trim() && !attachedFile)
+                disabled ||
+                isEncrypting ||
+                (!message.trim() && !attachedFile && !selectedGif)
               }
               size="icon"
               className={cn(

@@ -281,6 +281,76 @@
   }
 }
 
+/* ============ PRIVACY PROTECTION STYLES ============ */
+
+/* Prevent text selection on protected content */
+.privacy-protected {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* INSTANT blur for PrintScreen - applied via JavaScript */
+.screenshot-blur-active .privacy-protected,
+.screenshot-blur-active .message-list,
+.screenshot-blur-active .message-bubble,
+.screenshot-blur-active main {
+  filter: blur(30px) !important;
+  opacity: 0.3 !important;
+  transition: none !important; /* Instant, no animation delay */
+}
+
+/* Overlay message when blurred */
+.screenshot-blur-active::before {
+  content: "🔒 Content Protected";
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 2rem;
+  font-weight: bold;
+  color: hsl(var(--foreground));
+  z-index: 99999;
+  pointer-events: none;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+/* Hide content when printing */
+@media print {
+  .privacy-protected,
+  .message-list,
+  .message-bubble,
+  main {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  body::before {
+    content: "🔒 Content Protected - Printing is disabled for privacy";
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    font-size: 24px;
+    color: #666;
+  }
+}
+
+/* Attempt to interfere with screenshot tools by using special rendering */
+.screenshot-protected {
+  /* Force GPU rendering which can interfere with some screenshot tools */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+
+  /* Backface visibility can affect how some tools capture content */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* ============ END PRIVACY PROTECTION ============ */
+
 /* Encryption shimmer animation */
 @keyframes shimmer {
   0% {

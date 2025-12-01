@@ -54,7 +54,7 @@ export function MessageList({
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full privacy-protected screenshot-protected">
       {/* Pinned Messages Section */}
       {pinnedMessages.length > 0 && (
         <div className="border-b bg-muted/30 p-3 space-y-2">

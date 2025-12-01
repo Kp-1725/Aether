@@ -38,6 +38,22 @@ interface MessageBubbleProps {
   onUnpin?: () => void;
 }
 
+// Helper to parse GIFs from message content
+function parseMessageContent(content: string): {
+  text: string;
+  gifUrl: string | null;
+} {
+  const gifRegex = /!\[GIF\]\((https?:\/\/[^\)]+)\)/;
+  const match = content.match(gifRegex);
+
+  if (match) {
+    const text = content.replace(gifRegex, "").trim();
+    return { text, gifUrl: match[1] };
+  }
+
+  return { text: content, gifUrl: null };
+}
+
 export function MessageBubble({
   id,
   sender,
@@ -51,6 +67,8 @@ export function MessageBubble({
   onPin,
   onUnpin,
 }: MessageBubbleProps) {
+  const { text, gifUrl } = parseMessageContent(content);
+
   return (
     <div
       id={`message-${id}`}
@@ -121,13 +139,24 @@ export function MessageBubble({
                   <FilePreview file={file} />
                 </div>
               )}
+              {/* GIF */}
+              {gifUrl && (
+                <div className="mb-2">
+                  <img
+                    src={gifUrl}
+                    alt="GIF"
+                    className="max-w-full rounded-lg max-h-48 object-contain"
+                    loading="lazy"
+                  />
+                </div>
+              )}
               {/* Text content */}
-              {content && (
+              {text && (
                 <p
                   className="text-sm whitespace-pre-wrap break-words"
                   data-testid="text-message-content"
                 >
-                  {content}
+                  {text}
                 </p>
               )}
             </Card>
