@@ -42,13 +42,12 @@ export default function Chat() {
   const { playSend, playReceive, playPin } = useSoundEffects();
 
   // Screenshot protection - Snapchat-style content protection
-  // TEMPORARILY DISABLED for report screenshots - re-enable when done!
   const { isBlurred, isProtected, attemptCount } = useScreenshotProtection({
-    enabled: false, // <-- DISABLED FOR NOW
-    blurOnInactive: false,
-    preventSelection: false,
-    preventContextMenu: false,
-    preventPrint: false,
+    enabled: true,
+    blurOnInactive: true,
+    preventSelection: true,
+    preventContextMenu: false, // Allow right-click
+    preventPrint: true,
     preventDevTools: false,
   });
 
